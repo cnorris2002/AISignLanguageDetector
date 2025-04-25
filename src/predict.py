@@ -10,11 +10,11 @@ try:
     # We might need a NEW function from TM2 specifically for frames
     # Let's assume for now TM2 provides 'get_landmarks_from_frame'
     # based on their landmark_extractor.py logic
-    from landmark_extractor import extract_normalized_landmarks # May need modification by TM2
-    print("Imported landmark extractor (ensure it handles frames).")
+    from landmark_extractor import get_normalized_vector
+    print("Successfully imported get_normalized_vector function.")
 except ImportError:
-    print("ERROR: Cannot import landmark extractor function from src.")
-    extract_normalized_landmarks = None # Handle error
+    print("Error. Could not import get_normalized_vector from landmark_extractor.py")
+    get_normalized_vector = None
 
 # MediaPipe utilities (needed again here)
 mp_hands = mp.solutions.hands
@@ -89,24 +89,18 @@ while True:
     # --- Landmark Extraction & Normalization (Needs TM2's Adapted Function) ---
     landmark_vector = None
     if results.multi_hand_landmarks:
+        # Print to check if hand is detected
+        print("Hand Detected!", end='\r')
         hand_landmarks = results.multi_hand_landmarks[0] # Get landmarks for the first (only) hand
 
-        # !!! IMPORTANT: Adapt TM2's function here !!!
-        # TM2 needs to provide a way to get the normalized (63,) vector 
-        # from 'hand_landmarks' object directly, or from the 'image_rgb' frame.
-        # Let's assume a function 'get_normalized_vector(hand_landmarks_object)' exists:
-        # landmark_vector = get_normalized_vector(hand_landmarks) 
-
-        # ---- TEMPORARY PLACEHOLDER (Replace with TM2's adapted logic) ----
-        # This basic extraction is NOT normalized correctly like in landmark_extractor.py
-        # TM2 needs to provide the proper relative + scaled extraction for frames.
-        temp_list = []
-        for lm in hand_landmarks.landmark:
-            temp_list.extend([lm.x, lm.y, lm.z])
-        if len(temp_list) == 63:
-             # You would apply TM2's normalization HERE before prediction
-             landmark_vector = np.array(temp_list) # Needs normalization! For testing shape only.
-             print("Warning: Using temporary landmark extraction - needs proper normalization from TM2.", end='\r') # REMOVE THIS PRINT LATER
+        if get_normalized_vector:
+            landmark_vector = get_normalized_vector(hand_landmarks)
+            if landmark_vector is None:
+                print("get_normalized_vector returned None", end='\r')
+            else:
+                print(f"Got landmark vector, shape: {landmark_vector.shape}", end='\r')
+        else:
+            landmark_vector = None
 
         # --- Draw Landmarks (Visualization) ---
         mp_drawing.draw_landmarks(
@@ -115,6 +109,9 @@ while True:
             mp_hands.HAND_CONNECTIONS,
             mp_drawing_styles.get_default_hand_landmarks_style(),
             mp_drawing_styles.get_default_hand_connections_style())
+    
+    else:
+        print("No Hand Detected", end='\r')
 
     # --- Prediction ---
     if landmark_vector is not None:

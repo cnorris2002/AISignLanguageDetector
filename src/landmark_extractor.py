@@ -11,77 +11,52 @@ hands_processor = mp_hands.Hands(
     min_detection_confidence=0.5 # Confidence threshold for detection
 )
 
-def extract_normalized_landmarks(image_path):
+
+    
+def get_normalized_vector(hand_landmarks_object):
     """
-    Loads an image, detects hand landmarks using MediaPipe, normalizes them 
-    (relative to wrist, scaled), and returns them as a flat numpy array.
+    Takes MediaPipe hand landmarks object, extracts the coordinates
+    and normalizes them (relatice to wrist), and returns them as a flat numpy
+    array.
 
     Args:
-        image_path (str): Path to the image file.
+        hand_landmarks_object: Specific hand_landmarks object from MediaPipe's
+        results
 
     Returns:
-        np.ndarray or None: A flat numpy array of shape (63,) representing the 
-                          normalized (x, y, z) landmarks if a hand is detected, 
-                          otherwise None.
+        np.ndarray: A flat numpy array of shape (63,) representing the
+        normalized (x,y,z) landmarks
     """
-    # --- Function logic will go here ---
-        # 1. Check if image path exists
-    if not os.path.exists(image_path):
-        print(f"Error: Image path not found: {image_path}") # Optional warning
-        return None
-
-    # 2. Load image using OpenCV
-    img_bgr = cv2.imread(image_path)
-    if img_bgr is None:
-        print(f"Error: Could not load image: {image_path}") # Optional warning
-        return None
-
-    # 3. Convert the BGR image to RGB (MediaPipe expects RGB)
-    image_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-
-    # --- Detection logic next ---
-    # 4. Process the image and find hands
-    results = hands_processor.process(image_rgb)
-
-
-    landmark_array = None # Initialize landmark_array
-    if results.multi_hand_landmarks:
-        # Assuming only one hand (max_num_hands=1)
-        hand_landmarks = results.multi_hand_landmarks[0]
-        
-        landmark_list = []
-        for landmark in hand_landmarks.landmark:
-            landmark_list.append([landmark.x, landmark.y, landmark.z])
-        
-        landmark_array = np.array(landmark_list) # Shape (21, 3)
-
-        if landmark_array.shape != (21, 3):
-             # print(f"Warning: Unexpected landmark array shape {landmark_array.shape} for {image_path}")
-             return None 
-             
-    else: 
-        # No hand detected
+    if hand_landmarks_object is None:
         return None
     
-    # --- Normalization logic next ---
-    scaled_landmarks = None # Initialize
-    
-    # a) Make relative to wrist (landmark 0)
-    relative_landmarks = landmark_array - landmark_array[0] 
+    landmark_list = []
 
-    # b) Scale based on max absolute value to roughly fit [-1, 1]
-    max_abs_val = np.max(np.abs(relative_landmarks))
-    if max_abs_val < 1e-6: # Avoid division by very small numbers (or zero)
-        scaled_landmarks = relative_landmarks # Already all zeros or close
+    # We then extract landmarks into a list
+    for landmark in hand_landmarks_object.landmark:
+        landmark_list.append([landmark.x, landmark.y, landmark.z])
+
+    # Then convert to NumPy array
+    landmark_array = np.array(landmark_list) # expected to be (21,3)
+
+    # Same normalization as original function
+    scaled_landmarks = None # used to initialize
+    if landmark_array.shape == (21,3):
+        # Should make it relative to the wrist
+        relative_landmarks = landmark_array - landmark_array[0]
+
+        # Scale based on max absolute value to roughly fit [-1, 1]
+        max_abs_val = np.max(np.abs(relative_landmarks))
+        if max_abs_val < 1e-6: 
+            scaled_landmarks = relative_landmarks
+        else:
+            scaled_landmarks = relative_landmarks / max_abs_val
+
+        # Flatten values and then return
+        return scaled_landmarks.flatten()
     else:
-        scaled_landmarks = relative_landmarks / max_abs_val
+        return None
 
-        # --- Flattening and return next --- 
-    if scaled_landmarks is not None:
-        return scaled_landmarks.flatten() # Shape (63,)
-    else:
-        return None # Should not happen if normalization logic is correct, but safe fallback
-    
 
 # --- Example Usage (for testing when running this script directly) ---
 if __name__ == "__main__":
