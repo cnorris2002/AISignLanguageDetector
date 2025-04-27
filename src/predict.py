@@ -4,34 +4,30 @@ import numpy as np
 import joblib
 import os
 
-# Import TM2's function (Needs adaptation - see Step 5 below)
-# Assuming the structure allows importing from landmark_extractor
+
 try:
-    # We might need a NEW function from TM2 specifically for frames
-    # Let's assume for now TM2 provides 'get_landmarks_from_frame'
-    # based on their landmark_extractor.py logic
+    # Using get_normalized_vector values from landmark_extractor.py
+    # We will use these vectors for our model
     from landmark_extractor import get_normalized_vector
     print("Successfully imported get_normalized_vector function.")
 except ImportError:
     print("Error. Could not import get_normalized_vector from landmark_extractor.py")
     get_normalized_vector = None
 
-# MediaPipe utilities (needed again here)
+
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 
-print("Libraries imported.")
 
-
-# --- Load Model and Class Names ---
-MODEL_PATH = './models/asl_classifier.pkl' # Adjust path if needed
-CLASS_NAMES_PATH = './data/processed/class_names.npy' # Adjust path
+# This will load our model and classes
+MODEL_PATH = './models/asl_classifier.pkl'
+CLASS_NAMES_PATH = './data/processed/class_names.npy'
 
 print("Loading trained model...")
 if not os.path.exists(MODEL_PATH) or not os.path.exists(CLASS_NAMES_PATH):
     print(f"ERROR: Model ('{MODEL_PATH}') or Class Names ('{CLASS_NAMES_PATH}') not found.")
-    print("Please run the training script (src/train.py) first.")
+    print("Please run the training script (src/train.py) first.") # to make sure the training model is ran first
     exit()
 
 try:
@@ -39,23 +35,22 @@ try:
     class_names = np.load(CLASS_NAMES_PATH)
     print("Model and class names loaded successfully.")
     print(f"Model type: {type(model)}")
-    print(f"Available classes: {class_names}")
+    print(f"Available classes: {class_names}") # letters a-z labeled as "classes"
 except Exception as e:
     print(f"Error loading model or class names: {e}")
     exit()
 
 
 print("Initializing MediaPipe Hands for video...")
-# For video stream, set static_image_mode to False
-# Adjust confidence levels if needed for real-time tracking
+# We can adjust confidence levels if needed for real-time tracking
 hands_detector_realtime = mp_hands.Hands(
     static_image_mode=False,     
     max_num_hands=1,
     min_detection_confidence=0.5,
-    min_tracking_confidence=0.5) # Tracking confidence is relevant for video
+    min_tracking_confidence=0.5) 
 print("MediaPipe Hands initialized.")
 
-
+# Open the webcam
 print("Initializing webcam...")
 cap = cv2.VideoCapture(0) 
 if not cap.isOpened():
@@ -67,32 +62,30 @@ print("Webcam initialized.")
 print("Starting real-time prediction loop... Press 'q' to quit.")
 
 while True:
-    # --- Read Frame ---
+    # Read whatever is on the screen
     success, frame = cap.read()
     if not success:
         print("Ignoring empty camera frame.")
         continue
 
-    # --- Flip Frame (Optional Mirror Effect) ---
     frame = cv2.flip(frame, 1) 
 
-    # --- Landmark Detection ---
-    # Make frame non-writeable for performance (optional)
+    # Landmark detection
     frame.flags.writeable = False
     image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands_detector_realtime.process(image_rgb)
-    # Make frame writeable again for drawing
     frame.flags.writeable = True
 
-    predicted_letter = "?" # Default text if no hand or prediction
+    predicted_letter = "?" # Default to ? if nothing is recognized
 
-    # --- Landmark Extraction & Normalization (Needs TM2's Adapted Function) ---
+    # Extracts landmarks and normalize them
     landmark_vector = None
     if results.multi_hand_landmarks:
         # Print to check if hand is detected
-        print("Hand Detected!", end='\r')
-        hand_landmarks = results.multi_hand_landmarks[0] # Get landmarks for the first (only) hand
+        # print("Hand Detected!", end='\r')
+        hand_landmarks = results.multi_hand_landmarks[0] # Get landmarks for the first hand
 
+        # function from landmark_extractor.py
         if get_normalized_vector:
             landmark_vector = get_normalized_vector(hand_landmarks)
             if landmark_vector is None:
@@ -102,9 +95,9 @@ while True:
         else:
             landmark_vector = None
 
-        # --- Draw Landmarks (Visualization) ---
+        # Visualition of the landmarks (dots)
         mp_drawing.draw_landmarks(
-            frame, # Draw on the BGR frame
+            frame,
             hand_landmarks,
             mp_hands.HAND_CONNECTIONS,
             mp_drawing_styles.get_default_hand_landmarks_style(),
@@ -113,25 +106,23 @@ while True:
     else:
         print("No Hand Detected", end='\r')
 
-    # --- Prediction ---
+    # This is where prediction happens, based on landmarks
     if landmark_vector is not None:
         try:
-            # Model expects a 2D array, even for one sample
             prediction_index = model.predict([landmark_vector])[0] 
             predicted_letter = class_names[prediction_index]
         except Exception as e:
             print(f"Error during prediction: {e}")
             predicted_letter = "Error"
 
-    # --- Display Output (Needs TM2's cv2.putText logic) ---
-    # Example: Put text near top-left corner
+    # Display the predicted letter
     cv2.putText(frame, f"Prediction: {predicted_letter}", (50, 50), 
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
-    # --- Show Frame ---
+    # Show frame
     cv2.imshow('ASL Letter Recognition', frame)
 
-    # --- Exit Condition ---
+    # Exit
     if cv2.waitKey(5) & 0xFF == ord('q'):
         print("\nExiting...")
         break
